@@ -1,0 +1,24 @@
+{
+  "name": "socket-three",
+  "version": "1.0.0",
+  "description": "Socket io stuff",
+  "homepage": "https://github.com/statmano/threesocket#readme",
+  "bugs": {
+    "url": "https://github.com/statmano/threesocket/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/statmano/threesocket.git"
+  },
+  "license": "ISC",
+  "author": "Sean OBrien",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "socket.io": "^4.8.3"
+  }
+}

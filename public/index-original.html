@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Triple Auction</title>
+    
+    <link rel="stylesheet" media="(max-width: 804px)" href="/style-m.css" />
+    <link rel="stylesheet" media="(min-width: 804px)" href="/style.css" />
+    <link
+      id="favicon"
+      rel="icon"
+      href="https://cdn.glitch.com/cbbaf302-0438-4cec-ba9b-7ca89d280a8c%2Ficon-zehorse.png?v=1583176968974"
+      type="image/png"
+    />
+  </head>
+  <body>
+    <ul id="messages"></ul>
+    <form id="form" action="">
+      <input id="input" autocomplete="off" /><button>Send it!</button>
+    </form>
+    <script src="https://code.jquery.com/jquery-2.2.2.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+
+  const form = document.getElementById('form');
+  const input = document.getElementById('input');
+  const messages = document.getElementById('messages');
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (input.value) {
+      socket.emit('chat message', input.value);
+      input.value = '';
+    }
+  });
+
+  socket.on('chat message', (msg) => {
+    const item = document.createElement('li');
+    item.textContent = msg;
+    messages.appendChild(item);
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+</script>
+<script type="module" src="/commands.js"></script>
+  </body>
+</html>
