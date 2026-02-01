@@ -63,36 +63,39 @@ socket.on('startBidding', (itemName) => {
     statusMsg.innerText = "Submit your secret bid!";
 });
 
-function nominate() {
-    const itemInput = document.getElementById('item-name');
-    if (itemInput.value) {
-        socket.emit('submitNomination', itemInput.value);
-        itemInput.value = '';
-    }
-}
-
 function submitBid() {
     const bidInput = document.getElementById('bid-amount');
     const val = parseInt(bidInput.value);
 
-    // Logic: Max Bid = Bankroll - (Remaining Items - 1)
     const itemsRemaining = 4 - myData.items.length;
     const maxAllowedBid = myData.bankroll - (itemsRemaining - 1);
 
     if (isNaN(val) || val < 0) {
-        alert("Please enter a valid number ($0 to pass).");
+        alert("Please enter a valid amount.");
     } else if (val > maxAllowedBid) {
-        alert(`Limit exceeded! To ensure you can afford ${itemsRemaining} items, your max bid is $${maxAllowedBid}.`);
+        alert(`Max bid is $${maxAllowedBid} to ensure you can afford ${itemsRemaining} items.`);
     } else {
         socket.emit('submitBid', val);
         bidZone.classList.add('hidden');
-        statusMsg.innerText = "Bid submitted. Waiting for others...";
+        statusMsg.innerText = "Bid recorded! Waiting for others...";
         bidInput.value = '';
+        bidInput.blur(); // Hides mobile keyboard
     }
 }
 
+function nominate() {
+    const itemInput = document.getElementById('item-name');
+    if (itemInput.value.trim() !== "") {
+        socket.emit('submitNomination', itemInput.value);
+        itemInput.value = '';
+        itemInput.blur(); // Hides mobile keyboard
+    }
+}
+
+// Update the round result display for mobile readability
 socket.on('roundResult', (res) => {
-    log.innerHTML += `<div><strong>${res.user}</strong> won <strong>${res.item}</strong> for $${res.bid}</div>`;
+    const entry = `<div style="margin-bottom:8px;">💰 <b>${res.user}</b>: ${res.item} ($${res.bid})</div>`;
+    log.innerHTML += entry;
     log.scrollTop = log.scrollHeight;
 });
 
