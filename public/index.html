@@ -3,140 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Auction</title>
+    <title>Auction App</title>
     <style>
-        :root {
-            --primary: #2563eb;
-            --secondary: #64748b;
-            --success: #22c55e;
-            --bg: #f8fafc;
-        }
-
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            margin: 0; 
-            padding: 10px; 
-            background: var(--bg);
-            color: #1e293b;
-        }
-
-        #login-screen {
-            max-width: 400px;
-            margin: 100px auto;
-            text-align: center;
-            padding: 20px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        }
-
-        #main-screen {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* Responsive User Cards */
-        #user-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .user-card {
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            font-size: 0.85rem;
-            text-align: center;
-        }
-
-        .user-card.finished {
-            background: #f0fdf4;
-            border-color: var(--success);
-        }
-
-        /* Action Areas */
-        .panel {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
-        }
-
-        #log {
-            height: 180px;
-            overflow-y: auto;
-            font-size: 0.9rem;
-            background: #1e293b;
-            color: #f1f5f9;
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        /* Mobile-Friendly Controls */
-        input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 16px; /* Prevents iOS auto-zoom on focus */
-        }
-
-        button {
-            width: 100%;
-            padding: 14px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        button:active { opacity: 0.8; }
-
+        :root { --primary: #2563eb; --bg: #f8fafc; }
+        body { font-family: sans-serif; margin: 0; padding: 15px; background: var(--bg); color: #1e293b; }
         .hidden { display: none; }
-
-        @media (max-width: 480px) {
-            #user-stats { grid-template-columns: 1fr; }
-            h2 { font-size: 1.2rem; }
-        }
+        #main-screen { max-width: 600px; margin: 0 auto; }
+        #user-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .user-card { background: white; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.8rem; text-align: center; }
+        .user-card.finished { background: #f0fdf4; border-color: #22c55e; }
+        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        #log { height: 150px; overflow-y: auto; font-size: 0.85rem; background: #1e293b; color: #f1f5f9; padding: 15px; border-radius: 8px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        @media (max-width: 480px) { #user-stats { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
+    <div id="login-screen" style="text-align: center; margin-top: 50px;">
         <h2>Auction Login</h2>
-        <input type="text" id="username" placeholder="Enter Username" autocomplete="off">
-        <button onclick="login()">Join Auction</button>
+        <input type="text" id="username" placeholder="Username">
+        <button onclick="login()">Join</button>
     </div>
 
     <div id="main-screen" class="hidden">
         <div id="user-stats"></div>
-        
         <div class="panel">
-            <h3 id="status-msg" style="margin-top:0">Waiting...</h3>
-            
+            <h3 id="status-msg">Waiting for users...</h3>
             <div id="nomination-zone" class="hidden">
                 <input type="text" id="item-name" placeholder="Item Name">
                 <button onclick="nominate()">Nominate Item</button>
             </div>
-
             <div id="bid-zone" class="hidden">
                 <p>Bidding on: <strong id="current-item"></strong></p>
                 <input type="number" id="bid-amount" placeholder="Your Bid" pattern="\d*">
                 <button onclick="submitBid()">Submit Secret Bid</button>
             </div>
         </div>
-
-        <div id="log"><strong>Winning Bids:</strong><hr style="border:0; border-top:1px solid #475569"></div>
+        <div id="log"><strong>Auction History:</strong><hr></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

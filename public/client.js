@@ -1,126 +1,119 @@
 const socket = io();
 let myData = null;
 
-const loginScreen = document.getElementById('login-screen');
-const mainScreen = document.getElementById('main-screen');
-const statusMsg = document.getElementById('status-msg');
-const nominationZone = document.getElementById('nomination-zone');
-const bidZone = document.getElementById('bid-zone');
-const log = document.getElementById('log');
-const userStats = document.getElementById('user-stats');
+// Re-login on refresh if name exists
+window.onload = () => {
+    const savedName = localStorage.getItem('auction_user');
+    if (savedName) socket.emit('rejoin', savedName);
+};
+
+socket.on('syncState', (data) => {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-screen').classList.remove('hidden');
+    myData = data.me;
+    updateUIWithPlayers(data.players);
+
+    if (data.auctionState.status === 'NOMINATING') {
+        handleNominationState(data.auctionState.currentNominator);
+    } else if (data.auctionState.status === 'BIDDING') {
+        handleBiddingState(data.auctionState.currentNomination);
+    } else if (data.auctionState.status === 'FINISHED') {
+        showGameOver(data.players);
+    }
+});
 
 function login() {
-    const user = document.getElementById('username').value;
+    const user = document.getElementById('username').value.trim();
     if (user) {
+        localStorage.setItem('auction_user', user);
         socket.emit('login', user);
-        loginScreen.classList.add('hidden');
-        mainScreen.classList.remove('hidden');
-    }
-}
-
-socket.on('updateUsers', (users) => {
-    myData = users.find(u => u.id === socket.id);
-
-    userStats.innerHTML = users.map(u => `
-        <div class="user-card ${u.items.length >= 4 ? 'finished' : ''}">
-            <b>${u.username} ${u.items.length >= 4 ? '(Done)' : ''}</b><br>
-            Bank: $${u.bankroll}<br>
-            <small>Items: ${u.items.join(', ') || 'None'}</small>
-        </div>
-    `).join('');
-
-    if (users.length < 3) {
-        statusMsg.innerText = `Awaiting ${3 - users.length} more user(s)...`;
-    }
-});
-
-socket.on('awaitNomination', (nominatorName) => {
-    bidZone.classList.add('hidden');
-    
-    // If I'm finished, I can't nominate
-    if (myData && myData.items.length >= 4) {
-        statusMsg.innerText = "You have 4 items. Waiting for others to finish.";
-        nominationZone.classList.add('hidden');
-        return;
-    }
-
-    const isMe = document.getElementById('username').value === nominatorName;
-    statusMsg.innerText = isMe ? "It's your turn to nominate!" : `Waiting for ${nominatorName} to nominate...`;
-    nominationZone.classList.toggle('hidden', !isMe);
-});
-
-socket.on('startBidding', (itemName) => {
-    nominationZone.classList.add('hidden');
-    
-    // If I'm finished, I just watch
-    if (myData && myData.items.length >= 4) {
-        statusMsg.innerText = `Bidding in progress for: ${itemName}`;
-        return;
-    }
-
-    bidZone.classList.remove('hidden');
-    document.getElementById('current-item').innerText = itemName;
-    statusMsg.innerText = "Submit your secret bid!";
-});
-
-function submitBid() {
-    const bidInput = document.getElementById('bid-amount');
-    const val = parseInt(bidInput.value);
-
-    const itemsRemaining = 4 - myData.items.length;
-    const maxAllowedBid = myData.bankroll - (itemsRemaining - 1);
-
-    if (isNaN(val) || val < 0) {
-        alert("Please enter a valid amount.");
-    } else if (val > maxAllowedBid) {
-        alert(`Max bid is $${maxAllowedBid} to ensure you can afford ${itemsRemaining} items.`);
-    } else {
-        socket.emit('submitBid', val);
-        bidZone.classList.add('hidden');
-        statusMsg.innerText = "Bid recorded! Waiting for others...";
-        bidInput.value = '';
-        bidInput.blur(); // Hides mobile keyboard
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('main-screen').classList.remove('hidden');
     }
 }
 
 function nominate() {
     const itemInput = document.getElementById('item-name');
-    if (itemInput.value.trim() !== "") {
+    if (itemInput.value.trim()) {
         socket.emit('submitNomination', itemInput.value);
         itemInput.value = '';
-        itemInput.blur(); // Hides mobile keyboard
     }
 }
 
-// Update the round result display for mobile readability
+function submitBid() {
+    const bidInput = document.getElementById('bid-amount');
+    const val = parseInt(bidInput.value);
+    const itemsRemaining = 4 - myData.items.length;
+    const maxAllowedBid = myData.bankroll - (itemsRemaining - 1);
+
+    if (isNaN(val) || val < 0) {
+        alert("Enter a valid number.");
+    } else if (val > maxAllowedBid) {
+        alert(`Max bid: $${maxAllowedBid}`);
+    } else {
+        socket.emit('submitBid', val);
+        document.getElementById('bid-zone').classList.add('hidden');
+        document.getElementById('status-msg').innerText = "Waiting for others...";
+        bidInput.value = '';
+    }
+}
+
+socket.on('updateUsers', (players) => {
+    updateUIWithPlayers(players);
+    const myName = localStorage.getItem('auction_user');
+    myData = players.find(p => p.username === myName);
+});
+
+socket.on('awaitNomination', handleNominationState);
+socket.on('startBidding', handleBiddingState);
+
 socket.on('roundResult', (res) => {
-    const entry = `<div style="margin-bottom:8px;">💰 <b>${res.user}</b>: ${res.item} ($${res.bid})</div>`;
-    log.innerHTML += entry;
-    log.scrollTop = log.scrollHeight;
+    document.getElementById('log').innerHTML += `<div>💰 ${res.user}: ${res.item} ($${res.bid})</div>`;
+    document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
 });
 
 socket.on('tie', (names) => {
     if (myData && myData.items.length < 4) {
-        alert(`Tie between ${names.join(' and ')}! Re-bidding...`);
-        bidZone.classList.remove('hidden');
+        alert(`Tie between ${names.join(' and ')}! Re-bid.`);
+        document.getElementById('bid-zone').classList.remove('hidden');
     }
 });
 
-socket.on('gameOver', (users) => {
-    mainScreen.innerHTML = `
-        <div style="text-align:center; padding: 20px;">
-            <h1>The auction is over, the results are below:</h1>
-            <table border="1" style="width:100%; border-collapse: collapse;">
-                <tr><th>User</th><th>Remaining Bankroll</th><th>Items Won</th></tr>
-                ${users.map(u => `
-                    <tr>
-                        <td>${u.username}</td>
-                        <td>$${u.bankroll}</td>
-                        <td>${u.items.join(', ')}</td>
-                    </tr>
-                `).join('')}
-            </table>
-            <br><button onclick="window.location.reload()">New Session</button>
+socket.on('gameOver', showGameOver);
+
+function updateUIWithPlayers(players) {
+    document.getElementById('user-stats').innerHTML = players.map(u => `
+        <div class="user-card ${u.items.length >= 4 ? 'finished' : ''}">
+            <b>${u.username}</b><br>$${u.bankroll} | ${u.items.length}/4
         </div>
+    `).join('');
+}
+
+function handleNominationState(nominatorName) {
+    document.getElementById('bid-zone').classList.add('hidden');
+    const myName = localStorage.getItem('auction_user');
+    const isMe = myName === nominatorName;
+    
+    if (myData && myData.items.length >= 4) {
+        document.getElementById('status-msg').innerText = "Watching...";
+        return;
+    }
+    document.getElementById('status-msg').innerText = isMe ? "Your turn!" : `Waiting for ${nominatorName}...`;
+    document.getElementById('nomination-zone').classList.toggle('hidden', !isMe);
+}
+
+function handleBiddingState(itemName) {
+    document.getElementById('nomination-zone').classList.add('hidden');
+    if (myData && myData.items.length >= 4) return;
+    document.getElementById('bid-zone').classList.remove('hidden');
+    document.getElementById('current-item').innerText = itemName;
+    document.getElementById('status-msg').innerText = "Submit bid!";
+}
+
+function showGameOver(players) {
+    document.getElementById('main-screen').innerHTML = `
+        <h1>Auction Over!</h1>
+        ${players.map(u => `<p>${u.username}: ${u.items.join(', ')} ($${u.bankroll} left)</p>`).join('')}
+        <button onclick="localStorage.clear(); location.reload();">New Game</button>
     `;
-});
+}
