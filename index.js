@@ -8,96 +8,118 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-let users = [];
-let bids = {};
-let currentNomination = null;
-let currentNominatorIdx = null;
+// --- GLOBAL STATE ---
+let players = {}; 
+let auctionState = {
+    status: 'WAITING', 
+    currentNomination: null,
+    currentNominator: null,
+    bids: {}
+};
+
 const MAX_USERS = 3;
 const ITEMS_GOAL = 4;
 
 io.on('connection', (socket) => {
-    socket.on('login', (username) => {
-        if (users.length < MAX_USERS) {
-            users.push({
-                id: socket.id,
-                username,
-                bankroll: 100,
-                items: [] // List of item names won
+    // RECOVERY: Reconnect existing user
+    socket.on('rejoin', (username) => {
+        if (players[username]) {
+            players[username].socketId = socket.id;
+            socket.emit('syncState', {
+                players: Object.values(players),
+                auctionState: auctionState,
+                me: players[username]
             });
-            io.emit('updateUsers', users);
-            if (users.length === MAX_USERS) startNewRound();
+            io.emit('updateUsers', Object.values(players));
+        }
+    });
+
+    // LOGIN: Initial entry
+    socket.on('login', (username) => {
+        if (Object.keys(players).length < MAX_USERS && !players[username]) {
+            players[username] = {
+                username: username,
+                socketId: socket.id,
+                bankroll: 100,
+                items: []
+            };
+            io.emit('updateUsers', Object.values(players));
+            if (Object.keys(players).length === MAX_USERS) {
+                startNewRound();
+            }
         }
     });
 
     socket.on('submitNomination', (itemName) => {
-        currentNomination = itemName;
-        bids = {};
+        auctionState.status = 'BIDDING';
+        auctionState.currentNomination = itemName;
+        auctionState.bids = {};
         io.emit('startBidding', itemName);
     });
 
     socket.on('submitBid', (amount) => {
-        bids[socket.id] = parseInt(amount);
-        // Only count bids from users who haven't finished their 4 items
-        const activeUsers = users.filter(u => u.items.length < ITEMS_GOAL);
-        if (Object.keys(bids).length === activeUsers.length) {
-            processBids();
+        const user = Object.values(players).find(p => p.socketId === socket.id);
+        if (user && auctionState.status === 'BIDDING') {
+            auctionState.bids[user.username] = parseInt(amount);
+            const activePlayers = Object.values(players).filter(p => p.items.length < ITEMS_GOAL);
+            if (Object.keys(auctionState.bids).length === activePlayers.length) {
+                processBids();
+            }
         }
     });
 });
 
 function startNewRound() {
-    const totalItemsWon = users.reduce((sum, u) => sum + u.items.length, 0);
+    const allPlayers = Object.values(players);
+    const totalItemsWon = allPlayers.reduce((sum, p) => sum + p.items.length, 0);
+
     if (totalItemsWon === MAX_USERS * ITEMS_GOAL) {
-        return io.emit('gameOver', users);
+        auctionState.status = 'FINISHED';
+        return io.emit('gameOver', allPlayers);
     }
 
-    // Find next nominator who has < 4 items
-    if (currentNominatorIdx === null) {
-        currentNominatorIdx = Math.floor(Math.random() * MAX_USERS);
+    let usernames = Object.keys(players);
+    if (!auctionState.currentNominator) {
+        auctionState.currentNominator = usernames[Math.floor(Math.random() * MAX_USERS)];
     }
 
-    // Logic: if current nominator is finished, move to next available
-    while (users[currentNominatorIdx].items.length >= ITEMS_GOAL) {
-        currentNominatorIdx = (currentNominatorIdx + 1) % MAX_USERS;
+    while (players[auctionState.currentNominator].items.length >= ITEMS_GOAL) {
+        let idx = usernames.indexOf(auctionState.currentNominator);
+        auctionState.currentNominator = usernames[(idx + 1) % MAX_USERS];
     }
 
-    const nominator = users[currentNominatorIdx];
-    io.emit('awaitNomination', nominator.username);
+    auctionState.status = 'NOMINATING';
+    io.emit('awaitNomination', auctionState.currentNominator);
 }
 
 function processBids() {
     let highestBid = -1;
     let winners = [];
 
-    for (let id in bids) {
-        if (bids[id] > highestBid) {
-            highestBid = bids[id];
-            winners = [id];
-        } else if (bids[id] === highestBid && highestBid > 0) {
-            winners.push(id);
+    for (let username in auctionState.bids) {
+        let bid = auctionState.bids[username];
+        if (bid > highestBid) {
+            highestBid = bid;
+            winners = [username];
+        } else if (bid === highestBid && highestBid > 0) {
+            winners.push(username);
         }
     }
 
-    if (highestBid <= 0) {
-        io.emit('logUpdate', "No bids over $0. Re-nominating.");
-        return startNewRound();
-    }
+    if (highestBid <= 0) return startNewRound();
 
     if (winners.length > 1) {
-        io.emit('tie', winners.map(id => users.find(u => u.id === id).username));
-        bids = {};
+        io.emit('tie', winners);
+        auctionState.bids = {}; 
     } else {
-        const winner = users.find(u => u.id === winners[0]);
+        const winner = players[winners[0]];
         winner.bankroll -= highestBid;
-        winner.items.push(currentNomination);
-        
-        io.emit('roundResult', { user: winner.username, bid: highestBid, item: currentNomination });
-        io.emit('updateUsers', users);
-
-        // Next nominator is the winner, unless they just finished their 4th item
-        currentNominatorIdx = users.findIndex(u => u.id === winner.id);
+        winner.items.push(auctionState.currentNomination);
+        io.emit('roundResult', { user: winner.username, bid: highestBid, item: auctionState.currentNomination });
+        io.emit('updateUsers', Object.values(players));
+        auctionState.currentNominator = winner.username;
         startNewRound();
     }
 }
 
-server.listen(3000, () => console.log('Auction running on http://localhost:3000'));
+server.listen(3000, () => console.log(`Auction Server on port 3000`));
