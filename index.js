@@ -8,11 +8,11 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// --- GLOBAL STATE ---
 let players = {}; 
 let auctionState = {
     status: 'WAITING', 
     currentNomination: null,
+    currentCategory: null,
     currentNominator: null,
     bids: {}
 };
@@ -21,7 +21,6 @@ const MAX_USERS = 3;
 const ITEMS_GOAL = 4;
 
 io.on('connection', (socket) => {
-    // RECOVERY: Reconnect existing user
     socket.on('rejoin', (username) => {
         if (players[username]) {
             players[username].socketId = socket.id;
@@ -34,35 +33,38 @@ io.on('connection', (socket) => {
         }
     });
 
-    // LOGIN: Initial entry
     socket.on('login', (username) => {
         if (Object.keys(players).length < MAX_USERS && !players[username]) {
             players[username] = {
                 username: username,
                 socketId: socket.id,
                 bankroll: 100,
-                items: []
+                items: [],
+                inventory: { Colt: 0, Filly: 0 }
             };
             io.emit('updateUsers', Object.values(players));
-            if (Object.keys(players).length === MAX_USERS) {
-                startNewRound();
-            }
+            if (Object.keys(players).length === MAX_USERS) startNewRound();
         }
     });
 
-    socket.on('submitNomination', (itemName) => {
+    socket.on('submitNomination', ({ itemName, category }) => {
         auctionState.status = 'BIDDING';
         auctionState.currentNomination = itemName;
-        auctionState.bids = {};
-        io.emit('startBidding', itemName);
+        auctionState.currentCategory = category;
+        auctionState.bids = {}; // Clear bids for new item
+        io.emit('startBidding', { itemName, category });
     });
 
     socket.on('submitBid', (amount) => {
         const user = Object.values(players).find(p => p.socketId === socket.id);
         if (user && auctionState.status === 'BIDDING') {
             auctionState.bids[user.username] = parseInt(amount);
-            const activePlayers = Object.values(players).filter(p => p.items.length < ITEMS_GOAL);
-            if (Object.keys(auctionState.bids).length === activePlayers.length) {
+            
+            const eligiblePlayers = Object.values(players).filter(p => 
+                p.inventory[auctionState.currentCategory] < 2 && p.items.length < 4
+            );
+
+            if (Object.keys(auctionState.bids).length >= eligiblePlayers.length) {
                 processBids();
             }
         }
@@ -73,7 +75,7 @@ function startNewRound() {
     const allPlayers = Object.values(players);
     const totalItemsWon = allPlayers.reduce((sum, p) => sum + p.items.length, 0);
 
-    if (totalItemsWon === MAX_USERS * ITEMS_GOAL) {
+    if (totalItemsWon === (MAX_USERS * ITEMS_GOAL)) {
         auctionState.status = 'FINISHED';
         return io.emit('gameOver', allPlayers);
     }
@@ -106,20 +108,34 @@ function processBids() {
         }
     }
 
-    if (highestBid <= 0) return startNewRound();
+    if (highestBid <= 0) {
+        auctionState.status = 'NOMINATING';
+        io.emit('awaitNomination', auctionState.currentNominator);
+        return;
+    }
 
     if (winners.length > 1) {
-        io.emit('tie', winners);
+        // TIE LOGIC: Clear bids and tell clients to show the bid box again
         auctionState.bids = {}; 
+        io.emit('tie', winners);
     } else {
         const winner = players[winners[0]];
         winner.bankroll -= highestBid;
-        winner.items.push(auctionState.currentNomination);
-        io.emit('roundResult', { user: winner.username, bid: highestBid, item: auctionState.currentNomination });
+        // Keep name and category for the UI
+        winner.items.push({ name: auctionState.currentNomination, category: auctionState.currentCategory });
+        winner.inventory[auctionState.currentCategory]++;
+        
+        io.emit('roundResult', { 
+            user: winner.username, 
+            bid: highestBid, 
+            item: auctionState.currentNomination,
+            category: auctionState.currentCategory 
+        });
+        
         io.emit('updateUsers', Object.values(players));
         auctionState.currentNominator = winner.username;
         startNewRound();
     }
 }
 
-server.listen(3000, () => console.log(`Auction Server on port 3000`));
+server.listen(3000, () => console.log(`Server running at http://localhost:3000`));
