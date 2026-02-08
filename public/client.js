@@ -1,7 +1,24 @@
 const socket = io();
 let myData = null;
 
-// Re-login on refresh if name exists
+// Handle the Join Button explicitly
+document.getElementById('join-btn').addEventListener('click', () => {
+    const user = document.getElementById('username').value.trim();
+    if (user) {
+        localStorage.setItem('auction_user', user);
+        socket.emit('login', user);
+    } else {
+        alert("Please enter a name");
+    }
+});
+
+socket.on('loginSuccess', (player) => {
+    myData = player;
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-screen').classList.remove('hidden');
+});
+
+// Auto-rejoin if page refreshes
 window.onload = () => {
     const savedName = localStorage.getItem('auction_user');
     if (savedName) socket.emit('rejoin', savedName);
@@ -12,50 +29,38 @@ socket.on('syncState', (data) => {
     document.getElementById('main-screen').classList.remove('hidden');
     myData = data.me;
     updateUIWithPlayers(data.players);
-
     if (data.auctionState.status === 'NOMINATING') {
         handleNominationState(data.auctionState.currentNominator);
     } else if (data.auctionState.status === 'BIDDING') {
-        handleBiddingState(data.auctionState.currentNomination);
-    } else if (data.auctionState.status === 'FINISHED') {
-        showGameOver(data.players);
+        if (data.auctionState.tiedUsers.length > 0) {
+            handleTieState(data.auctionState.tiedUsers);
+        } else {
+            handleBiddingState(data.auctionState.currentNomination, data.auctionState.currentCategory);
+        }
     }
 });
 
-function login() {
-    const user = document.getElementById('username').value.trim();
-    if (user) {
-        localStorage.setItem('auction_user', user);
-        socket.emit('login', user);
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('main-screen').classList.remove('hidden');
-    }
-}
-
 function nominate() {
-    const itemInput = document.getElementById('item-name');
-    if (itemInput.value.trim()) {
-        socket.emit('submitNomination', itemInput.value);
-        itemInput.value = '';
-    }
+    const name = document.getElementById('item-name').value.trim();
+    const cat = document.getElementById('item-category').value;
+    if (!name || !cat) return alert("Select Name and Category!");
+    if (myData.inventory[cat] >= 2) return alert(`You already have 2 ${cat}s!`);
+    socket.emit('submitNomination', { itemName: name, category: cat });
 }
 
 function submitBid() {
     const bidInput = document.getElementById('bid-amount');
     const val = parseInt(bidInput.value);
-    const itemsRemaining = 4 - myData.items.length;
-    const maxAllowedBid = myData.bankroll - (itemsRemaining - 1);
+    const slotsLeft = 4 - myData.items.length;
+    const max = myData.bankroll - (slotsLeft - 1);
 
-    if (isNaN(val) || val < 0) {
-        alert("Enter a valid number.");
-    } else if (val > maxAllowedBid) {
-        alert(`Max bid: $${maxAllowedBid}`);
-    } else {
-        socket.emit('submitBid', val);
-        document.getElementById('bid-zone').classList.add('hidden');
-        document.getElementById('status-msg').innerText = "Waiting for others...";
-        bidInput.value = '';
-    }
+    if (isNaN(val) || val < 0) return alert("Valid number please.");
+    if (val > max) return alert("You must save $1 for each remaining horse slot!");
+
+    socket.emit('submitBid', val);
+    document.getElementById('bid-zone').classList.add('hidden');
+    document.getElementById('status-msg').innerText = "Bid sent! Waiting...";
+    bidInput.value = '';
 }
 
 socket.on('updateUsers', (players) => {
@@ -65,55 +70,69 @@ socket.on('updateUsers', (players) => {
 });
 
 socket.on('awaitNomination', handleNominationState);
-socket.on('startBidding', handleBiddingState);
+socket.on('startBidding', (data) => handleBiddingState(data.itemName, data.category));
+
+socket.on('tie', (data) => {
+    handleTieState(data.winners, data.allBids);
+});
+
+function handleTieState(winners, allBids) {
+    const myName = localStorage.getItem('auction_user');
+    if(allBids) {
+        let bids = Object.entries(allBids).map(([u, b]) => `${u}: $${b}`).join(', ');
+        document.getElementById('log').innerHTML += `<div style="color:#f87171">TIE: ${bids}</div>`;
+    }
+    if (winners.includes(myName)) {
+        alert("You are tied! Only tied users bid now.");
+        document.getElementById('bid-zone').classList.remove('hidden');
+        document.getElementById('status-msg').innerText = "TIE BREAKER: Resubmit bid!";
+    } else {
+        document.getElementById('bid-zone').classList.add('hidden');
+        document.getElementById('status-msg').innerText = `Tie-break: ${winners.join(' vs ')}`;
+    }
+}
 
 socket.on('roundResult', (res) => {
-    document.getElementById('log').innerHTML += `<div>💰 ${res.user}: ${res.item} ($${res.bid})</div>`;
+    let reveal = Object.entries(res.allBids).map(([u, b]) => `${u}: $${b}`).join(' | ');
+    document.getElementById('log').innerHTML += `
+        <div style="margin-bottom:10px; border-left:3px solid #2563eb; padding-left:10px;">
+            <b style="color:#60a5fa">${res.user} won ${res.item} ($${res.bid})</b>
+            <div class="bid-reveal">Bids: ${reveal}</div>
+        </div>
+    `;
     document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
 });
 
-socket.on('tie', (names) => {
-    if (myData && myData.items.length < 4) {
-        alert(`Tie between ${names.join(' and ')}! Re-bid.`);
-        document.getElementById('bid-zone').classList.remove('hidden');
-    }
-});
-
-socket.on('gameOver', showGameOver);
-
 function updateUIWithPlayers(players) {
-    document.getElementById('user-stats').innerHTML = players.map(u => `
-        <div class="user-card ${u.items.length >= 4 ? 'finished' : ''}">
-            <b>${u.username}</b><br>$${u.bankroll} | ${u.items.length}/4
-        </div>
-    `).join('');
+    document.getElementById('user-stats').innerHTML = players.map(u => {
+        const horses = u.items.map(i => `<div>• ${i.name} (${i.category[0]})</div>`).join('');
+        return `
+            <div class="user-card">
+                <b>${u.username}</b>
+                <div>Bank: $${u.bankroll}</div>
+                <div>C: ${u.inventory.Colt}/2 | F: ${u.inventory.Filly}/2</div>
+                <div class="item-list">${horses || 'No horses'}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function handleNominationState(nominatorName) {
     document.getElementById('bid-zone').classList.add('hidden');
-    const myName = localStorage.getItem('auction_user');
-    const isMe = myName === nominatorName;
-    
-    if (myData && myData.items.length >= 4) {
-        document.getElementById('status-msg').innerText = "Watching...";
-        return;
-    }
-    document.getElementById('status-msg').innerText = isMe ? "Your turn!" : `Waiting for ${nominatorName}...`;
+    const isMe = localStorage.getItem('auction_user') === nominatorName;
+    document.getElementById('status-msg').innerText = isMe ? "Your Nomination!" : `Waiting for ${nominatorName}...`;
     document.getElementById('nomination-zone').classList.toggle('hidden', !isMe);
 }
 
-function handleBiddingState(itemName) {
+function handleBiddingState(itemName, category) {
     document.getElementById('nomination-zone').classList.add('hidden');
-    if (myData && myData.items.length >= 4) return;
-    document.getElementById('bid-zone').classList.remove('hidden');
-    document.getElementById('current-item').innerText = itemName;
-    document.getElementById('status-msg').innerText = "Submit bid!";
-}
-
-function showGameOver(players) {
-    document.getElementById('main-screen').innerHTML = `
-        <h1>Auction Over!</h1>
-        ${players.map(u => `<p>${u.username}: ${u.items.join(', ')} ($${u.bankroll} left)</p>`).join('')}
-        <button onclick="localStorage.clear(); location.reload();">New Game</button>
-    `;
+    const full = myData && (myData.items.length >= 4 || myData.inventory[category] >= 2);
+    if (full) {
+        document.getElementById('status-msg').innerText = `Full on ${category}s. Watching...`;
+        document.getElementById('bid-zone').classList.add('hidden');
+    } else {
+        document.getElementById('bid-zone').classList.remove('hidden');
+        document.getElementById('current-item').innerText = `${itemName} (${category})`;
+        document.getElementById('status-msg').innerText = "Submit Bid!";
+    }
 }
