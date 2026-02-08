@@ -1,6 +1,24 @@
 const socket = io();
 let myData = null;
 
+// Handle the Join Button explicitly
+document.getElementById('join-btn').addEventListener('click', () => {
+    const user = document.getElementById('username').value.trim();
+    if (user) {
+        localStorage.setItem('auction_user', user);
+        socket.emit('login', user);
+    } else {
+        alert("Please enter a name");
+    }
+});
+
+socket.on('loginSuccess', (player) => {
+    myData = player;
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-screen').classList.remove('hidden');
+});
+
+// Auto-rejoin if page refreshes
 window.onload = () => {
     const savedName = localStorage.getItem('auction_user');
     if (savedName) socket.emit('rejoin', savedName);
@@ -11,49 +29,37 @@ socket.on('syncState', (data) => {
     document.getElementById('main-screen').classList.remove('hidden');
     myData = data.me;
     updateUIWithPlayers(data.players);
-
     if (data.auctionState.status === 'NOMINATING') {
         handleNominationState(data.auctionState.currentNominator);
     } else if (data.auctionState.status === 'BIDDING') {
-        handleBiddingState(data.auctionState.currentNomination, data.auctionState.currentCategory);
-    } else if (data.auctionState.status === 'FINISHED') {
-        showGameOver(data.players);
+        if (data.auctionState.tiedUsers.length > 0) {
+            handleTieState(data.auctionState.tiedUsers);
+        } else {
+            handleBiddingState(data.auctionState.currentNomination, data.auctionState.currentCategory);
+        }
     }
 });
-
-function login() {
-    const user = document.getElementById('username').value.trim();
-    if (user) {
-        localStorage.setItem('auction_user', user);
-        socket.emit('login', user);
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('main-screen').classList.remove('hidden');
-    }
-}
 
 function nominate() {
     const name = document.getElementById('item-name').value.trim();
     const cat = document.getElementById('item-category').value;
-    if (!name || !cat) return alert("Select Name and Type!");
-    if (myData.inventory[cat] >= 2) return alert(`Already have two ${cat}s!`);
-
+    if (!name || !cat) return alert("Select Name and Category!");
+    if (myData.inventory[cat] >= 2) return alert(`You already have 2 ${cat}s!`);
     socket.emit('submitNomination', { itemName: name, category: cat });
-    document.getElementById('item-name').value = '';
-    document.getElementById('item-category').selectedIndex = 0;
 }
 
 function submitBid() {
     const bidInput = document.getElementById('bid-amount');
     const val = parseInt(bidInput.value);
-    const totalRemaining = 4 - myData.items.length;
-    const maxAllowedBid = myData.bankroll - (totalRemaining - 1);
+    const slotsLeft = 4 - myData.items.length;
+    const max = myData.bankroll - (slotsLeft - 1);
 
-    if (isNaN(val) || val < 0) return alert("Enter a valid number.");
-    if (val > maxAllowedBid) return alert(`Max bid: $${maxAllowedBid}`);
+    if (isNaN(val) || val < 0) return alert("Valid number please.");
+    if (val > max) return alert("You must save $1 for each remaining horse slot!");
 
     socket.emit('submitBid', val);
     document.getElementById('bid-zone').classList.add('hidden');
-    document.getElementById('status-msg').innerText = "Bid sent! Waiting for others...";
+    document.getElementById('status-msg').innerText = "Bid sent! Waiting...";
     bidInput.value = '';
 }
 
@@ -66,39 +72,46 @@ socket.on('updateUsers', (players) => {
 socket.on('awaitNomination', handleNominationState);
 socket.on('startBidding', (data) => handleBiddingState(data.itemName, data.category));
 
+socket.on('tie', (data) => {
+    handleTieState(data.winners, data.allBids);
+});
+
+function handleTieState(winners, allBids) {
+    const myName = localStorage.getItem('auction_user');
+    if(allBids) {
+        let bids = Object.entries(allBids).map(([u, b]) => `${u}: $${b}`).join(', ');
+        document.getElementById('log').innerHTML += `<div style="color:#f87171">TIE: ${bids}</div>`;
+    }
+    if (winners.includes(myName)) {
+        alert("You are tied! Only tied users bid now.");
+        document.getElementById('bid-zone').classList.remove('hidden');
+        document.getElementById('status-msg').innerText = "TIE BREAKER: Resubmit bid!";
+    } else {
+        document.getElementById('bid-zone').classList.add('hidden');
+        document.getElementById('status-msg').innerText = `Tie-break: ${winners.join(' vs ')}`;
+    }
+}
+
 socket.on('roundResult', (res) => {
-    document.getElementById('log').innerHTML += `<div>💰 ${res.user}: ${res.item} (${res.category}) - $${res.bid}</div>`;
+    let reveal = Object.entries(res.allBids).map(([u, b]) => `${u}: $${b}`).join(' | ');
+    document.getElementById('log').innerHTML += `
+        <div style="margin-bottom:10px; border-left:3px solid #2563eb; padding-left:10px;">
+            <b style="color:#60a5fa">${res.user} won ${res.item} ($${res.bid})</b>
+            <div class="bid-reveal">Bids: ${reveal}</div>
+        </div>
+    `;
     document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
 });
 
-socket.on('tie', (names) => {
-    // Only those eligible for this horse receive the re-bid prompt
-    const myName = localStorage.getItem('auction_user');
-    const statusMsg = document.getElementById('status-msg');
-    
-    // Check if the current user was part of the tie (or is at least eligible to bid)
-    // We check the bid zone visibility to see if they were an active bidder
-    if (myData && myData.inventory[document.getElementById('current-item').innerText.includes('Colt') ? 'Colt' : 'Filly'] < 2) {
-        alert(`Tie between ${names.join(' & ')}! Resubmit your bids.`);
-        document.getElementById('bid-zone').classList.remove('hidden');
-        statusMsg.innerText = "TIE BREAKER: Resubmit bid!";
-    }
-});
-
-socket.on('gameOver', showGameOver);
-
 function updateUIWithPlayers(players) {
     document.getElementById('user-stats').innerHTML = players.map(u => {
-        const itemDisplay = u.items.map(i => 
-            `<div>• ${i.name} <span class="category-badge ${i.category === 'Colt' ? 'c-badge' : 'f-badge'}">${i.category[0]}</span></div>`
-        ).join('');
-
+        const horses = u.items.map(i => `<div>• ${i.name} (${i.category[0]})</div>`).join('');
         return `
-            <div class="user-card ${u.items.length >= 4 ? 'finished' : ''}">
+            <div class="user-card">
                 <b>${u.username}</b>
                 <div>Bank: $${u.bankroll}</div>
-                <div style="font-size: 0.7rem; margin: 4px 0;">C: ${u.inventory.Colt}/2 | F: ${u.inventory.Filly}/2</div>
-                <div class="item-list">${itemDisplay || '<i>Empty</i>'}</div>
+                <div>C: ${u.inventory.Colt}/2 | F: ${u.inventory.Filly}/2</div>
+                <div class="item-list">${horses || 'No horses'}</div>
             </div>
         `;
     }).join('');
@@ -106,39 +119,20 @@ function updateUIWithPlayers(players) {
 
 function handleNominationState(nominatorName) {
     document.getElementById('bid-zone').classList.add('hidden');
-    const myName = localStorage.getItem('auction_user');
-    const isMe = myName === nominatorName;
-    
-    if (myData && myData.items.length >= 4) {
-        document.getElementById('status-msg').innerText = "Roster full.";
-        return;
-    }
-    document.getElementById('status-msg').innerText = isMe ? "Your turn to nominate!" : `Waiting for ${nominatorName}...`;
+    const isMe = localStorage.getItem('auction_user') === nominatorName;
+    document.getElementById('status-msg').innerText = isMe ? "Your Nomination!" : `Waiting for ${nominatorName}...`;
     document.getElementById('nomination-zone').classList.toggle('hidden', !isMe);
 }
 
 function handleBiddingState(itemName, category) {
     document.getElementById('nomination-zone').classList.add('hidden');
-    const ineligible = myData && (myData.items.length >= 4 || myData.inventory[category] >= 2);
-    
-    if (ineligible) {
-        document.getElementById('status-msg').innerHTML = `<span style="color:gray">Ineligible for ${category}.</span>`;
+    const full = myData && (myData.items.length >= 4 || myData.inventory[category] >= 2);
+    if (full) {
+        document.getElementById('status-msg').innerText = `Full on ${category}s. Watching...`;
         document.getElementById('bid-zone').classList.add('hidden');
     } else {
         document.getElementById('bid-zone').classList.remove('hidden');
         document.getElementById('current-item').innerText = `${itemName} (${category})`;
-        document.getElementById('status-msg').innerText = "Submit your bid!";
+        document.getElementById('status-msg').innerText = "Submit Bid!";
     }
-}
-
-function showGameOver(players) {
-    document.getElementById('main-screen').innerHTML = `
-        <div class="panel">
-            <h2>Draft Complete</h2>
-            ${players.map(u => `
-                <p><strong>${u.username}</strong>: ${u.items.map(i => i.name).join(', ')}</p>
-            `).join('')}
-            <button onclick="localStorage.clear(); location.reload();">New Draft</button>
-        </div>
-    `;
 }

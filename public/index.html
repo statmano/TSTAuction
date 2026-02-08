@@ -2,56 +2,54 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Horse Draft Room</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horse Auction</title>
     <style>
         :root { --primary: #2563eb; --bg: #f1f5f9; }
-        body { font-family: -apple-system, sans-serif; margin: 0; padding: 15px; background: var(--bg); color: #1e293b; }
+        body { font-family: sans-serif; margin: 0; padding: 15px; background: var(--bg); }
         .hidden { display: none; }
-        #main-screen { max-width: 600px; margin: 0 auto; }
-        #user-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 15px; }
-        .user-card { background: white; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.8rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .user-card b { display: block; border-bottom: 1px solid #f1f5f9; margin-bottom: 5px; padding-bottom: 2px; font-size: 0.9rem; }
-        .user-card.finished { background: #f0fdf4; border-color: #22c55e; }
-        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        #log { height: 160px; overflow-y: auto; font-size: 0.85rem; background: #1e293b; color: #f1f5f9; padding: 15px; border-radius: 8px; }
-        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .item-list { margin-top: 8px; font-size: 0.75rem; color: #64748b; line-height: 1.2; }
-        .category-badge { font-weight: bold; padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; }
-        .c-badge { background: #dbeafe; color: #1e40af; }
-        .f-badge { background: #fce7f3; color: #9d174d; }
-        @media (max-width: 480px) { #user-stats { grid-template-columns: 1fr; } }
+        #main-screen { max-width: 800px; margin: 0 auto; }
+        #user-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .user-card { background: white; padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 0.85rem; }
+        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        #log { height: 250px; overflow-y: auto; background: #1e293b; color: white; padding: 15px; border-radius: 8px; font-family: monospace; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background: var(--primary); color: white; font-weight: bold; cursor: pointer; border: none; }
+        .c-badge { color: #60a5fa; font-weight: bold; }
+        .f-badge { color: #f472b6; font-weight: bold; }
+        .bid-reveal { color: #94a3b8; font-size: 0.8rem; padding-top: 4px; border-top: 1px solid #334155; margin-top: 4px; }
     </style>
 </head>
 <body>
-    <div id="login-screen" style="text-align: center; margin-top: 50px;">
-        <h2>Auction Login</h2>
-        <input type="text" id="username" placeholder="Username">
-        <button onclick="login()">Join</button>
+
+    <div id="login-screen" style="text-align: center; max-width: 400px; margin: 100px auto;">
+        <h1>Enter Draft</h1>
+        <input type="text" id="username" placeholder="Your Name">
+        <button id="join-btn">Join Auction</button>
     </div>
 
     <div id="main-screen" class="hidden">
         <div id="user-stats"></div>
         <div class="panel">
-            <h3 id="status-msg">Waiting...</h3>
+            <h2 id="status-msg">Waiting for others...</h2>
             <div id="nomination-zone" class="hidden">
                 <input type="text" id="item-name" placeholder="Horse Name">
                 <select id="item-category">
-                    <option value="" disabled selected>-- Select Type --</option>
+                    <option value="" disabled selected>-- Select Category --</option>
                     <option value="Colt">Colt</option>
                     <option value="Filly">Filly</option>
                 </select>
-                <button onclick="nominate()">Nominate</button>
+                <button onclick="nominate()">Nominate Horse</button>
             </div>
             <div id="bid-zone" class="hidden">
                 <p>Bidding on: <strong id="current-item"></strong></p>
-                <input type="number" id="bid-amount" placeholder="Your Bid" pattern="\d*">
-                <button onclick="submitBid()">Submit Bid</button>
+                <input type="number" id="bid-amount" placeholder="Your Bid">
+                <button onclick="submitBid()">Submit Secret Bid</button>
             </div>
         </div>
-        <div id="log"><strong>History:</strong><hr style="opacity:0.1"></div>
+        <div id="log"><strong>Auction History</strong><hr></div>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
 </body>
