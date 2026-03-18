@@ -100,39 +100,24 @@ socket.on('roundResult', (res) => {
             <div class="bid-reveal">Bids: ${reveal}</div>
         </div>
     `;
-    document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
 });
 
-function updateUIWithPlayers(players) {
-    document.getElementById('user-stats').innerHTML = players.map(u => {
-        const horses = u.items.map(i => `<div>• ${i.name} (${i.category[0]})</div>`).join('');
-        return `
-            <div class="user-card">
-                <b>${u.username}</b>
-                <div>Bank: $${u.bankroll}</div>
-                <div>C: ${u.inventory.Colt}/2 | F: ${u.inventory.Filly}/2</div>
-                <div class="item-list">${horses || 'No horses'}</div>
-            </div>
-        `;
-    }).join('');
-}
-
-function handleNominationState(nominatorName) {
-    document.getElementById('bid-zone').classList.add('hidden');
-    const isMe = localStorage.getItem('auction_user') === nominatorName;
-    document.getElementById('status-msg').innerText = isMe ? "Your Nomination!" : `Waiting for ${nominatorName}...`;
-    document.getElementById('nomination-zone').classList.toggle('hidden', !isMe);
-}
-
-function handleBiddingState(itemName, category) {
-    document.getElementById('nomination-zone').classList.add('hidden');
-    const full = myData && (myData.items.length >= 4 || myData.inventory[category] >= 2);
-    if (full) {
-        document.getElementById('status-msg').innerText = `Full on ${category}s. Watching...`;
-        document.getElementById('bid-zone').classList.add('hidden');
-    } else {
-        document.getElementById('bid-zone').classList.remove('hidden');
-        document.getElementById('current-item').innerText = `${itemName} (${category})`;
-        document.getElementById('status-msg').innerText = "Submit Bid!";
+// Load and display selected names from JSON file
+async function loadSelectedNames() {
+    try {
+        const response = await fetch('selected.json');
+        const data = await response.json();
+        const names = data.Selected.sort();
+        const tbody = document.getElementById('selected-names-body');
+        tbody.innerHTML = names.map(name => `
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">${name}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading selected names:', error);
     }
 }
+
+// Load selected names when the page loads
+document.addEventListener('DOMContentLoaded', loadSelectedNames);
