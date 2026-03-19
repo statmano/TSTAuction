@@ -4,25 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Horse Auction</title>
-    <style>
-        :root { --primary: #2563eb; --bg: #f1f5f9; }
-        body { font-family: sans-serif; margin: 0; padding: 15px; background: var(--bg); }
-        .hidden { display: none; }
-        #main-screen { max-width: 800px; margin: 0 auto; }
-        #user-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px; }
-        .user-card { background: white; padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 0.85rem; }
-        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        #log { height: 250px; overflow-y: auto; background: #1e293b; color: white; padding: 15px; border-radius: 8px; font-family: monospace; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background: var(--primary); color: white; font-weight: bold; cursor: pointer; border: none; }
-        .c-badge { color: #60a5fa; font-weight: bold; }
-        .f-badge { color: #f472b6; font-weight: bold; }
-        .bid-reveal { color: #94a3b8; font-size: 0.8rem; padding-top: 4px; border-top: 1px solid #334155; margin-top: 4px; }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="login-screen" style="text-align: center; max-width: 400px; margin: 100px auto;">
+    <div id="login-screen" class="login-panel">
         <h1>Enter Draft</h1>
         <input type="text" id="username" placeholder="Your Name">
         <button id="join-btn">Join Auction</button>
@@ -48,23 +37,23 @@
             </div>
         </div>
         <div id="log"><strong>Auction History</strong><hr></div>
+        <div class="panel">
+            <h3>Selected Names</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                    </tr>
+                </thead>
+                <tbody id="selected-names-body">
+                    <!-- Names will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
 
-    <div class="panel">
-        <h3>Selected Names</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr>
-                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Name</th>
-                </tr>
-            </thead>
-            <tbody id="selected-names-body">
-                <!-- Names will be populated here by JavaScript -->
-            </tbody>
-        </table>
-    </div>
 </body>
 </html>
