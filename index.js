@@ -40,6 +40,11 @@ io.on('connection', (socket) => {
             if (Object.keys(players).length === MAX_USERS) {
                 startNewRound();
             }
+        } else {
+            const reason = players[username]
+                ? 'That name is already taken. Please choose another.'
+                : 'Auction is full. Please try again later.';
+            socket.emit('loginFailed', reason);
         }
     });
 

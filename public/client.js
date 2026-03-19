@@ -18,6 +18,10 @@ socket.on('loginSuccess', (player) => {
     document.getElementById('main-screen').classList.remove('hidden');
 });
 
+socket.on('loginFailed', (reason) => {
+    alert(reason);
+});
+
 // Auto-rejoin if page refreshes
 window.onload = () => {
     const savedName = localStorage.getItem('auction_user');
@@ -101,6 +105,46 @@ socket.on('roundResult', (res) => {
         </div>
     `;
 });
+
+function updateUIWithPlayers(players) {
+    const myName = localStorage.getItem('auction_user');
+    const myPlayer = players.find(p => p.username === myName);
+    if (myPlayer) myData = myPlayer;
+
+    const userStats = players.map((p) => {
+        const isMe = p.username === myName;
+        const itemList = p.items.length ? p.items.map(i => `${i.name} (${i.category})`).join(', ') : 'None';
+        return `
+            <div class="user-card" style="${isMe ? 'border: 2px solid var(--primary);' : ''}">
+                <div><strong>${p.username}</strong> ${isMe ? '(You)' : ''}</div>
+                <div>Bankroll: $${p.bankroll}</div>
+                <div>Items: ${itemList}</div>
+                <div>Inventory: Colt ${p.inventory.Colt}, Filly ${p.inventory.Filly}</div>
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('user-stats').innerHTML = userStats;
+}
+
+function handleNominationState(currentNominator) {
+    const myName = localStorage.getItem('auction_user');
+    const isMyTurn = myName === currentNominator;
+
+    document.getElementById('bid-zone').classList.add('hidden');
+    document.getElementById('nomination-zone').classList.toggle('hidden', !isMyTurn);
+
+    document.getElementById('status-msg').innerText = isMyTurn
+        ? `It's your turn to nominate a horse!`
+        : `${currentNominator} is nominating...`;
+}
+
+function handleBiddingState(itemName, category) {
+    document.getElementById('nomination-zone').classList.add('hidden');
+    document.getElementById('bid-zone').classList.remove('hidden');
+    document.getElementById('current-item').innerText = `${itemName} (${category})`;
+    document.getElementById('status-msg').innerText = `Bidding on: ${itemName} (${category})`;
+}
 
 // Load and display selected names from JSON file
 async function loadSelectedNames() {
