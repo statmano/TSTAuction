@@ -99,8 +99,8 @@ function handleTieState(winners, allBids) {
 socket.on('roundResult', (res) => {
     let reveal = Object.entries(res.allBids).map(([u, b]) => `${u}: $${b}`).join(' | ');
     document.getElementById('log').innerHTML += `
-        <div style="margin-bottom:10px; border-left:3px solid #2563eb; padding-left:10px;">
-            <b style="color:#60a5fa">${res.user} won ${res.item} ($${res.bid})</b>
+        <div style="margin-bottom:10px; border-left:3px solid #bfbfbf; padding-left:10px;">
+            <b style="color:#bfbfbf">${res.user} won ${res.item} ($${res.bid})</b>
             <div class="bid-reveal">Bids: ${reveal}</div>
         </div>
     `;
@@ -114,7 +114,7 @@ function updateUIWithPlayers(players) {
     const userStats = players.map((p) => {
         const isMe = p.username === myName;
         const itemList = p.items.length 
-            ? p.items.map(i => `<div style="padding: 4px 0; color: #60a5fa;">• ${i.name} <span style="font-size: 0.85rem; opacity: 0.8;">(${i.category})</span></div>`).join('')
+            ? p.items.map(i => `<div style="padding: 4px 0; color: #f1f1f1;">• ${i.name} <span style="font-size: 0.85rem; opacity: 0.8;">(${i.category})</span></div>`).join('')
             : '<div style="opacity: 0.6;">None</div>';
         return `
             <div class="user-card" style="${isMe ? 'border: 2px solid var(--primary);' : ''}">
@@ -149,7 +149,7 @@ function handleBiddingState(itemName, category) {
     document.getElementById('nomination-zone').classList.add('hidden');
     document.getElementById('bid-zone').classList.remove('hidden');
     document.getElementById('current-item').innerText = `${itemName} (${category})`;
-    document.getElementById('status-msg').innerText = `Bidding on: ${itemName} (${category})`;
+    document.getElementById('status-msg').innerText = `Place your bid for ${itemName} (${category})`;
 }
 
 // Load and display selected names from JSON file
