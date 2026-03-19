@@ -113,16 +113,22 @@ function updateUIWithPlayers(players) {
 
     const userStats = players.map((p) => {
         const isMe = p.username === myName;
-        const itemList = p.items.length ? p.items.map(i => `${i.name} (${i.category})`).join(', ') : 'None';
+        const itemList = p.items.length 
+            ? p.items.map(i => `<div style="padding: 4px 0; color: #60a5fa;">• ${i.name} <span style="font-size: 0.85rem; opacity: 0.8;">(${i.category})</span></div>`).join('')
+            : '<div style="opacity: 0.6;">None</div>';
         return `
             <div class="user-card" style="${isMe ? 'border: 2px solid var(--primary);' : ''}">
                 <div><strong>${p.username}</strong> ${isMe ? '(You)' : ''}</div>
                 <div>Bankroll: $${p.bankroll}</div>
-                <div>Items: ${itemList}</div>
-                <div>Inventory: Colt ${p.inventory.Colt}, Filly ${p.inventory.Filly}</div>
+                <div style="margin: 6px 0; font-size: 0.9rem;">
+                    <span style="opacity: 0.75;">Won:</span>
+                    ${itemList}
+                </div>
+                <div style="opacity: 0.8; font-size: 0.9rem;">Colts: ${p.inventory.Colt} | Fillies: ${p.inventory.Filly}</div>
             </div>
         `;
     }).join('');
+
 
     document.getElementById('user-stats').innerHTML = userStats;
 }

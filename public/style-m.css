@@ -1,3 +1,5 @@
+/* Mobile-specific adjustments (optional). */
+
 body {
-    background-color: yellowgreen;
+  background: linear-gradient(135deg, #0b1224 0%, #1f2a4b 55%, #0b1224 100%);
 }
