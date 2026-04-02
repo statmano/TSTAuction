@@ -26,6 +26,12 @@ body {
   background-attachment: fixed;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 h1 {
   font-family: "Grape Nuts", cursive;
   font-size: 2.5rem;
@@ -139,6 +145,7 @@ input,
 select,
 button {
   width: 100%;
+  max-width: 100%;
   padding: 14px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -147,6 +154,7 @@ button {
   font-size: 1rem;
   outline: none;
   transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+  margin-bottom: 14px;
 }
 
 input:focus,
