@@ -195,6 +195,16 @@ button:active {
   border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.user-card.my-card {
+  border-color: #60a5fa;
+}
+
+.user-card.bid-submitted {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
 }
 
 .user-card strong {

@@ -1,5 +1,7 @@
 const socket = io();
 let myData = null;
+let currentBids = {};
+let currentCategory = null;
 
 // Handle the Join Button explicitly
 document.getElementById('join-btn').addEventListener('click', () => {
@@ -32,7 +34,9 @@ socket.on('syncState', (data) => {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-screen').classList.remove('hidden');
     myData = data.me;
-    updateUIWithPlayers(data.players);
+    currentBids = data.auctionState?.bids || {};
+    currentCategory = data.auctionState?.currentCategory || null;
+    updateUIWithPlayers(data.players, currentBids);
     if (data.auctionState.status === 'NOMINATING') {
         handleNominationState(data.auctionState.currentNominator);
     } else if (data.auctionState.status === 'BIDDING') {
@@ -52,7 +56,15 @@ function nominate() {
     socket.emit('submitNomination', { itemName: name, category: cat });
 }
 
+function canBidForCategory(player, category) {
+    return player && player.items.length < 4 && player.inventory[category] < 2;
+}
+
 function submitBid() {
+    if (!canBidForCategory(myData, currentCategory)) {
+        return alert(`You cannot bid on ${currentCategory} because you already have the maximum allowed for that category.`);
+    }
+
     const bidInput = document.getElementById('bid-amount');
     const val = parseInt(bidInput.value);
     const slotsLeft = 4 - myData.items.length;
@@ -67,14 +79,21 @@ function submitBid() {
     bidInput.value = '';
 }
 
-socket.on('updateUsers', (players) => {
-    updateUIWithPlayers(players);
+socket.on('updateUsers', (data) => {
+    const players = data.players;
+    currentBids = data.bids || {};
+    updateUIWithPlayers(players, currentBids);
     const myName = localStorage.getItem('auction_user');
     myData = players.find(p => p.username === myName);
 });
 
 socket.on('awaitNomination', handleNominationState);
 socket.on('startBidding', (data) => handleBiddingState(data.itemName, data.category));
+
+socket.on('bidRejected', (message) => {
+    document.getElementById('bid-zone').classList.add('hidden');
+    document.getElementById('status-msg').innerText = message;
+});
 
 socket.on('tie', (data) => {
     handleTieState(data.winners, data.allBids);
@@ -106,18 +125,19 @@ socket.on('roundResult', (res) => {
     `;
 });
 
-function updateUIWithPlayers(players) {
+function updateUIWithPlayers(players, submittedBids = {}) {
     const myName = localStorage.getItem('auction_user');
     const myPlayer = players.find(p => p.username === myName);
     if (myPlayer) myData = myPlayer;
 
     const userStats = players.map((p) => {
         const isMe = p.username === myName;
+        const hasSubmitted = submittedBids[p.username] !== undefined;
         const itemList = p.items.length 
             ? p.items.map(i => `<div style="padding: 4px 0; color: #f1f1f1;">• ${i.name} <span style="font-size: 0.85rem; opacity: 0.8;">(${i.category})</span></div>`).join('')
             : '<div style="opacity: 0.6;">None</div>';
         return `
-            <div class="user-card" style="${isMe ? 'border: 2px solid var(--primary);' : ''}">
+            <div class="user-card${isMe ? ' my-card' : ''}${hasSubmitted ? ' bid-submitted' : ''}">
                 <div><strong>${p.username}</strong> ${isMe ? '(You)' : ''}</div>
                 <div>Bankroll: $${p.bankroll}</div>
                 <div style="margin: 6px 0; font-size: 0.9rem;">
@@ -146,10 +166,17 @@ function handleNominationState(currentNominator) {
 }
 
 function handleBiddingState(itemName, category) {
+    currentCategory = category;
     document.getElementById('nomination-zone').classList.add('hidden');
-    document.getElementById('bid-zone').classList.remove('hidden');
     document.getElementById('current-item').innerText = `${itemName} (${category})`;
-    document.getElementById('status-msg').innerText = `Place your bid for ${itemName} (${category})`;
+
+    if (canBidForCategory(myData, category)) {
+        document.getElementById('bid-zone').classList.remove('hidden');
+        document.getElementById('status-msg').innerText = `Place your bid for ${itemName} (${category})`;
+    } else {
+        document.getElementById('bid-zone').classList.add('hidden');
+        document.getElementById('status-msg').innerText = `You cannot bid on ${itemName} (${category}) because you already have the allowed amount.`;
+    }
 }
 
 // Load and display selected names from JSON file

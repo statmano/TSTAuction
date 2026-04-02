@@ -18,6 +18,28 @@ let auctionState = {
     bids: {}
 };
 
+function isEligibleBidder(player) {
+    if (!player || auctionState.status !== 'BIDDING') return false;
+    if (player.items.length >= ITEMS_GOAL) return false;
+    if (player.inventory[auctionState.currentCategory] >= 2) return false;
+    if (auctionState.tiedUsers.length > 0) {
+        return auctionState.tiedUsers.includes(player.username);
+    }
+    return true;
+}
+
+function getEligibleBidderCount() {
+    if (auctionState.tiedUsers.length > 0) return auctionState.tiedUsers.length;
+    return Object.values(players).filter(p => isEligibleBidder(p)).length;
+}
+
+function broadcastUsers() {
+    io.emit('updateUsers', {
+        players: Object.values(players),
+        bids: auctionState.bids
+    });
+}
+
 const MAX_USERS = 3;
 const ITEMS_GOAL = 4;
 
@@ -35,7 +57,7 @@ io.on('connection', (socket) => {
                 inventory: { Colt: 0, Filly: 0 }
             };
             socket.emit('loginSuccess', players[username]);
-            io.emit('updateUsers', Object.values(players));
+            broadcastUsers();
             
             if (Object.keys(players).length === MAX_USERS) {
                 startNewRound();
@@ -56,7 +78,7 @@ io.on('connection', (socket) => {
                 auctionState: auctionState,
                 me: players[username]
             });
-            io.emit('updateUsers', Object.values(players));
+            broadcastUsers();
         }
     });
 
@@ -66,26 +88,25 @@ io.on('connection', (socket) => {
         auctionState.currentCategory = category;
         auctionState.tiedUsers = [];
         auctionState.bids = {};
+        broadcastUsers();
         io.emit('startBidding', { itemName, category });
     });
 
     socket.on('submitBid', (amount) => {
         const user = Object.values(players).find(p => p.socketId === socket.id);
-        if (user && auctionState.status === 'BIDDING') {
-            auctionState.bids[user.username] = parseInt(amount);
-            
-            let requiredCount;
-            if (auctionState.tiedUsers.length > 0) {
-                requiredCount = auctionState.tiedUsers.length;
-            } else {
-                requiredCount = Object.values(players).filter(p => 
-                    p.inventory[auctionState.currentCategory] < 2 && p.items.length < 4
-                ).length;
-            }
+        if (!user || auctionState.status !== 'BIDDING') return;
 
-            if (Object.keys(auctionState.bids).length >= requiredCount) {
-                processBids();
-            }
+        if (!isEligibleBidder(user)) {
+            socket.emit('bidRejected', 'You are not eligible to bid for this category.');
+            return;
+        }
+
+        auctionState.bids[user.username] = parseInt(amount);
+        broadcastUsers();
+
+        const requiredCount = getEligibleBidderCount();
+        if (Object.keys(auctionState.bids).length >= requiredCount) {
+            processBids();
         }
     });
 });
@@ -156,7 +177,7 @@ function processBids() {
             allBids: finalBids 
         });
         
-        io.emit('updateUsers', Object.values(players));
+        broadcastUsers();
         auctionState.currentNominator = winnerName;
         startNewRound();
     }
