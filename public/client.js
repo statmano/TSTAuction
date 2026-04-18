@@ -1,7 +1,71 @@
-const socket = io();
+const socket = io({
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 20000
+});
 let myData = null;
 let currentBids = {};
 let currentCategory = null;
+let isConnected = false;
+
+// Connection status monitoring
+socket.on('connect', () => {
+    console.log('Connected to server');
+    isConnected = true;
+    updateConnectionStatus(true);
+});
+
+socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+    isConnected = false;
+    updateConnectionStatus(false);
+});
+
+socket.on('reconnect', () => {
+    console.log('Reconnected to server');
+    isConnected = true;
+    updateConnectionStatus(true);
+    // Re-sync state after reconnection
+    const savedName = localStorage.getItem('auction_user');
+    if (savedName && myData) {
+        socket.emit('rejoin', savedName);
+    }
+});
+
+function updateConnectionStatus(connected) {
+    const statusIndicator = document.getElementById('connection-status');
+    if (!statusIndicator) {
+        // Create status indicator if it doesn't exist
+        const indicator = document.createElement('div');
+        indicator.id = 'connection-status';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
+        `;
+        document.body.appendChild(indicator);
+    }
+
+    const indicator = document.getElementById('connection-status');
+    if (connected) {
+        indicator.textContent = '🟢 Connected';
+        indicator.style.backgroundColor = 'rgba(34, 197, 94, 0.8)';
+        indicator.style.color = 'white';
+        setTimeout(() => indicator.style.display = 'none', 3000);
+    } else {
+        indicator.textContent = '🔴 Disconnected';
+        indicator.style.backgroundColor = 'rgba(239, 68, 68, 0.8)';
+        indicator.style.color = 'white';
+        indicator.style.display = 'block';
+    }
+}
 
 // Handle the Join Button explicitly
 document.getElementById('join-btn').addEventListener('click', () => {
@@ -73,10 +137,46 @@ function submitBid() {
     if (isNaN(val) || val < 0) return alert("Valid number please.");
     if (val > max) return alert("You must save $1 for each remaining horse slot!");
 
-    socket.emit('submitBid', val);
+    // Check connection before submitting
+    if (!isConnected) {
+        alert("Connection lost. Please wait for reconnection and try again.");
+        return;
+    }
+
+    // Attempt to submit bid with retry logic
+    submitBidWithRetry(val, 3);
+}
+
+function submitBidWithRetry(amount, retries) {
+    if (!isConnected && retries > 0) {
+        console.log(`Connection lost, retrying bid submission in 1 second... (${retries} retries left)`);
+        setTimeout(() => submitBidWithRetry(amount, retries - 1), 1000);
+        return;
+    }
+
+    if (!isConnected) {
+        alert("Unable to submit bid - connection lost. Please refresh the page.");
+        return;
+    }
+
+    socket.emit('submitBid', amount);
     document.getElementById('bid-zone').classList.add('hidden');
     document.getElementById('status-msg').innerText = "Bid sent! Waiting...";
-    bidInput.value = '';
+    document.getElementById('bid-amount').value = '';
+
+    // Set a timeout to check if bid was acknowledged
+    setTimeout(() => {
+        if (document.getElementById('status-msg').innerText === "Bid sent! Waiting...") {
+            console.log("Bid submission may have failed, attempting retry...");
+            if (retries > 0) {
+                submitBidWithRetry(amount, retries - 1);
+            } else {
+                alert("Bid submission failed. Please try again.");
+                document.getElementById('bid-zone').classList.remove('hidden');
+                document.getElementById('status-msg').innerText = "Bidding on: " + document.getElementById('current-item').innerText;
+            }
+        }
+    }, 3000);
 }
 
 socket.on('updateUsers', (data) => {
@@ -91,8 +191,14 @@ socket.on('awaitNomination', handleNominationState);
 socket.on('startBidding', (data) => handleBiddingState(data.itemName, data.category));
 
 socket.on('bidRejected', (message) => {
-    document.getElementById('bid-zone').classList.add('hidden');
-    document.getElementById('status-msg').innerText = message;
+    alert(message);
+    document.getElementById('bid-zone').classList.remove('hidden');
+    document.getElementById('status-msg').innerText = "Bidding on: " + document.getElementById('current-item').innerText;
+});
+
+socket.on('bidAcknowledged', (data) => {
+    console.log('Bid acknowledged:', data);
+    // Bid was successfully received by server
 });
 
 socket.on('tie', (data) => {

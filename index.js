@@ -94,7 +94,10 @@ io.on('connection', (socket) => {
 
     socket.on('submitBid', (amount) => {
         const user = Object.values(players).find(p => p.socketId === socket.id);
-        if (!user || auctionState.status !== 'BIDDING') return;
+        if (!user || auctionState.status !== 'BIDDING') {
+            socket.emit('bidRejected', 'Invalid bid submission.');
+            return;
+        }
 
         if (!isEligibleBidder(user)) {
             socket.emit('bidRejected', 'You are not eligible to bid for this category.');
@@ -102,12 +105,20 @@ io.on('connection', (socket) => {
         }
 
         auctionState.bids[user.username] = parseInt(amount);
+        // Send acknowledgment to the bidder
+        socket.emit('bidAcknowledged', { amount: parseInt(amount), username: user.username });
         broadcastUsers();
 
         const requiredCount = getEligibleBidderCount();
         if (Object.keys(auctionState.bids).length >= requiredCount) {
             processBids();
         }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        // Don't remove player data, just mark as disconnected
+        // They can reconnect with the rejoin event
     });
 });
 
