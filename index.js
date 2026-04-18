@@ -94,8 +94,12 @@ io.on('connection', (socket) => {
 
     socket.on('submitBid', (amount) => {
         const user = Object.values(players).find(p => p.socketId === socket.id);
-        if (!user || auctionState.status !== 'BIDDING') {
-            socket.emit('bidRejected', 'Invalid bid submission.');
+        if (!user) {
+            socket.emit('bidRejected', 'Player not found. Please refresh the page.');
+            return;
+        }
+        if (auctionState.status !== 'BIDDING') {
+            socket.emit('bidRejected', 'Not currently bidding.');
             return;
         }
 

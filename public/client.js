@@ -9,6 +9,7 @@ let myData = null;
 let currentBids = {};
 let currentCategory = null;
 let isConnected = false;
+let pendingBid = null; // Track pending bid to prevent duplicates
 
 // Connection status monitoring
 socket.on('connect', () => {
@@ -29,7 +30,7 @@ socket.on('reconnect', () => {
     updateConnectionStatus(true);
     // Re-sync state after reconnection
     const savedName = localStorage.getItem('auction_user');
-    if (savedName && myData) {
+    if (savedName) {
         socket.emit('rejoin', savedName);
     }
 });
@@ -118,6 +119,7 @@ function nominate() {
     if (!name || !cat) return alert("Select Name and Category!");
     if (myData.inventory[cat] >= 2) return alert(`You already have 2 ${cat}s!`);
     socket.emit('submitNomination', { itemName: name, category: cat });
+    document.getElementById('item-name').value = '';
 }
 
 function canBidForCategory(player, category) {
@@ -125,6 +127,16 @@ function canBidForCategory(player, category) {
 }
 
 function submitBid() {
+    if (pendingBid !== null) {
+        console.log("Bid already pending, ignoring duplicate submission");
+        return;
+    }
+
+    if (!myData) {
+        alert("Player data not loaded. Please wait for reconnection.");
+        return;
+    }
+
     if (!canBidForCategory(myData, currentCategory)) {
         return alert(`You cannot bid on ${currentCategory} because you already have the maximum allowed for that category.`);
     }
@@ -143,40 +155,23 @@ function submitBid() {
         return;
     }
 
-    // Attempt to submit bid with retry logic
-    submitBidWithRetry(val, 3);
-}
-
-function submitBidWithRetry(amount, retries) {
-    if (!isConnected && retries > 0) {
-        console.log(`Connection lost, retrying bid submission in 1 second... (${retries} retries left)`);
-        setTimeout(() => submitBidWithRetry(amount, retries - 1), 1000);
-        return;
-    }
-
-    if (!isConnected) {
-        alert("Unable to submit bid - connection lost. Please refresh the page.");
-        return;
-    }
-
-    socket.emit('submitBid', amount);
+    // Mark bid as pending and submit
+    pendingBid = val;
+    socket.emit('submitBid', val);
     document.getElementById('bid-zone').classList.add('hidden');
     document.getElementById('status-msg').innerText = "Bid sent! Waiting...";
     document.getElementById('bid-amount').value = '';
 
-    // Set a timeout to check if bid was acknowledged
+    // Set timeout for acknowledgment
     setTimeout(() => {
-        if (document.getElementById('status-msg').innerText === "Bid sent! Waiting...") {
-            console.log("Bid submission may have failed, attempting retry...");
-            if (retries > 0) {
-                submitBidWithRetry(amount, retries - 1);
-            } else {
-                alert("Bid submission failed. Please try again.");
-                document.getElementById('bid-zone').classList.remove('hidden');
-                document.getElementById('status-msg').innerText = "Bidding on: " + document.getElementById('current-item').innerText;
-            }
+        if (pendingBid !== null) {
+            console.log("Bid acknowledgment timeout, bid may have failed");
+            pendingBid = null;
+            alert("Bid submission timed out. Please try again.");
+            document.getElementById('bid-zone').classList.remove('hidden');
+            document.getElementById('status-msg').innerText = "Bidding on: " + document.getElementById('current-item').innerText;
         }
-    }, 3000);
+    }, 5000);
 }
 
 socket.on('updateUsers', (data) => {
@@ -188,9 +183,14 @@ socket.on('updateUsers', (data) => {
 });
 
 socket.on('awaitNomination', handleNominationState);
-socket.on('startBidding', (data) => handleBiddingState(data.itemName, data.category));
+socket.on('startBidding', (data) => {
+    pendingBid = null; // Clear any pending bid when new bidding starts
+    handleBiddingState(data.itemName, data.category);
+});
 
 socket.on('bidRejected', (message) => {
+    console.log('Bid rejected:', message);
+    pendingBid = null;
     alert(message);
     document.getElementById('bid-zone').classList.remove('hidden');
     document.getElementById('status-msg').innerText = "Bidding on: " + document.getElementById('current-item').innerText;
@@ -198,7 +198,8 @@ socket.on('bidRejected', (message) => {
 
 socket.on('bidAcknowledged', (data) => {
     console.log('Bid acknowledged:', data);
-    // Bid was successfully received by server
+    pendingBid = null;
+    // Bid was successfully received by server - no need to show alert
 });
 
 socket.on('tie', (data) => {
@@ -222,6 +223,7 @@ function handleTieState(winners, allBids) {
 }
 
 socket.on('roundResult', (res) => {
+    pendingBid = null; // Clear any pending bid when round ends
     let reveal = Object.entries(res.allBids).map(([u, b]) => `${u}: $${b}`).join(' | ');
     document.getElementById('log').innerHTML += `
         <div style="margin-bottom:10px; border-left:3px solid #bfbfbf; padding-left:10px;">
